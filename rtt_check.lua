@@ -274,4 +274,11 @@ end
 -- register_menu(stringa, funzione, where)
 register_menu("RTT/View RTT Reference Table", menu_view_reference_rtt, MENU_TOOLS_UNSORTED)
 
+set_plugin_info({
+    version = "4.4",
+    description = "RTT-Geo-Location-Anomaly-Detector",
+    author = "Nicofontanarosa",
+    repository = "https://github.com/Nicofontanarosa/RTT-Geo-Location-Anomaly-Detector/"
+})
+
 --##################################################
