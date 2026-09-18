@@ -129,6 +129,28 @@ If an anomaly is detected ( *i.e., the measured RTT significantly differs from t
 
 <p align="center"><img src="img/img3.png" /></p>
 
+The `rtt_check.lua` script analyzes the Round-Trip Time (RTT) of TCP and ICMP packets. Packets are inspected by extracting their measured RTT and cross-referencing it against expected baseline latency values derived from the packet's geographic location (retrieved via the MaxMind database).
+
+An observed latency value ($RTT_{value}$) is flagged as anomalous if it falls outside the confidence interval defined by the mean and standard deviation of known response times for a specific country.
+
+Formal condition for a valid $RTT_{value}$:
+
+$$RTT_{MEAN} - k \cdot STD\_DEV \le RTT_{value} \le RTT_{MEAN} + k \cdot STD\_DEV$$
+
+In our implementation, $k$ is set to **2**, a standard threshold in normal distribution analysis. Conceptually, $k$ represents a $Z$-score threshold defining our tolerance limit: a boundary of 2 standard deviations covers approximately 95% of expected observations in a standard normal distribution. Consequently, an RTT is accepted as legitimate if it lies within two standard deviations of the regional mean.
+
+If $RTT_{value}$ breaches this interval—or if a mismatch occurs between the detected source country and the estimated source country—the packet is tagged as a **potential anomaly** and visually flagged as a protocol error highlighted in red within Wireshark.
+
+During packet parsing, `rtt_check.lua` compares the packet's detected country code against the baseline metrics stored in memory from `ntp_rtt_stats.txt` (produced by the Python generator script).
+
+Because the reference baseline file is generated selectively, certain country codes listed in the MaxMind database may not have a dedicated entry in the file. When an unmapped country is encountered, the script executes the following fallback workflow:
+
+1. **Extract Coordinates:** Retrieves the geographic latitude and longitude for the unmapped country from MaxMind.
+2. **Determine Continent:** Maps these coordinates to its corresponding continent.
+3. **Regional RTT Comparison:** Evaluates the packet's observed RTT against the calculated baseline average for that continent.
+
+Continents are bounded using coordinate-range polygons. These spatial boundaries were validated using **gps-coordinates.net** and a dedicated Python testing script that parses known coordinate sets to map continental perimeters accurately.
+
 ---
 
 # 📌 Requirements
