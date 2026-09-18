@@ -139,7 +139,7 @@ $$RTT_{MEAN} - k \cdot STD\_DEV \le RTT_{value} \le RTT_{MEAN} + k \cdot STD\_DE
 
 In our implementation, $k$ is set to **2**, a standard threshold in normal distribution analysis. Conceptually, $k$ represents a $Z$-score threshold defining our tolerance limit: a boundary of 2 standard deviations covers approximately 95% of expected observations in a standard normal distribution. Consequently, an RTT is accepted as legitimate if it lies within two standard deviations of the regional mean.
 
-If $RTT_{value}$ breaches this interval—or if a mismatch occurs between the detected source country and the estimated source country—the packet is tagged as a **potential anomaly** and visually flagged as a protocol error highlighted in red within Wireshark.
+If $RTT_{value}$ breaches this interval, or if a mismatch occurs between the detected source country and the estimated source country, the packet is tagged as a **potential anomaly** and visually flagged as a protocol error highlighted in red within Wireshark.
 
 During packet parsing, `rtt_check.lua` compares the packet's detected country code against the baseline metrics stored in memory from `ntp_rtt_stats.txt` (produced by the Python generator script).
 
@@ -149,7 +149,9 @@ Because the reference baseline file is generated selectively, certain country co
 2. **Determine Continent:** Maps these coordinates to its corresponding continent.
 3. **Regional RTT Comparison:** Evaluates the packet's observed RTT against the calculated baseline average for that continent.
 
-Continents are bounded using coordinate-range polygons. These spatial boundaries were validated using **gps-coordinates.net** and a dedicated Python testing script that parses known coordinate sets to map continental perimeters accurately.
+Continents are bounded using coordinate-range polygons. These spatial boundaries were validated using **gps-coordinates.net** and a dedicated Python testing script that parses known coordinate sets to map continental perimeters accurately:
+
+<p align="center"><img src="img/img4.png" /></p>
 
 ---
 
