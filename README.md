@@ -176,6 +176,14 @@ This project is distributed under the terms of the MIT License. A complete copy 
 
 ---
 
+# ☕ Support My Work
+
+If you find this project useful and would like to see more content like this, consider buying me a coffee! Your support helps me maintain and build more open-source tools
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy_Me_A_Coffee-000000?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://www.buymeacoffee.com/Nicofontanarosa)
+
+---
+
 # 🙌 DISCLAIMER
 
 While I do my best to detect location anomalies, I cannot guarantee that this software is error-free or 100% accurate. Please ensure that you respect users' privacy and have proper authorization to monitor, capture, and inspect network traffic
