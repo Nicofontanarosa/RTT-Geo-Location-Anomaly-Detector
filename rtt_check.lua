@@ -1,9 +1,10 @@
-
--- Script in Lua per Wireshark che confronta l'RTT TCP o ICMP misurato con l'RTT medio del paese di origine dell'IP sorgente, basato sui dati di MaxMind
+ 
+-- Lua script for Wireshark that compares measured TCP or ICMP RTT
+-- with the average RTT of the source IP's country, based on MaxMind data
 
 --##################################################
 
--- Mappatura dei continenti in base a latitudine e longitudine ( approssimativa ) 
+-- Continent mapping based on latitude and longitude (approximate)
 local continents = {
 
     ["Oceania"] = {
@@ -46,75 +47,73 @@ local continents = {
     }
 }
 
--- Funzione che verifica se un punto (lat, lon) è dentro un poligono definito dai suoi vertici -> Algoritmo di Ray-Casting
--- L'idea di base è quella di tracciare una linea orizzontale ( parallela all'asse delle X ) dal punto in questione
--- e contare quante volte questa linea interseca i lati del poligono. Se il numero di intersezioni è dispari, il punto è all'interno del poligono; se è pari, è all'esterno
+-- Function that checks if a point (lat, lon) is inside a polygon defined by its vertices -> Ray-Casting algorithm
+-- The basic idea is to cast a horizontal ray from the point and count
+-- how many times it intersects the polygon edges. If the number of
+-- intersections is odd, the point is inside; if even, it's outside.
 function is_point_in_polygon(point, polygon)
 
-    local x, y = point[1], point[2]  -- Estrae latitudine (x) e longitudine (y) dal punto
-    local n = #polygon               -- Numero di vertici del poligono
-    local inside = false             -- Variabile che terrà traccia se il punto è dentro il poligono o no
+    local x, y = point[1], point[2]  -- Extract latitude (x) and longitude (y) from the point
+    local n = #polygon               -- Number of polygon vertices
+    local inside = false             -- Tracks whether the point is inside the polygon
 
     -- Itera su ogni lato del poligono
     for i = 1, n do
 
-        local x1, y1 = polygon[i][1], polygon[i][2]                      -- Vertice iniziale del lato
-        local x2, y2 = polygon[(i % n) + 1][1], polygon[(i % n) + 1][2]  -- Vertice finale del lato che alla fine sarà l'ultimo lato del poligono
+        local x1, y1 = polygon[i][1], polygon[i][2]                      -- Start vertex of the edge
+        local x2, y2 = polygon[(i % n) + 1][1], polygon[(i % n) + 1][2]  -- End vertex of the edge
 
-        -- Controlla se il punto si trova tra i due vertici in latitudine (y)
+        -- Check if the point's latitude (y) is between the two vertices
         if (y1 > y) ~= (y2 > y) then
-            -- Calcola la longitudine del punto di intersezione tra il lato e la linea orizzontale che passa per `y`
+            -- Compute the longitude of the intersection between the edge and the horizontal line at `y`
             local x_intersection = (y - y1) * (x2 - x1) / (y2 - y1) + x1
 
-            -- Se il punto si trova alla sinistra della linea di intersezione (x < x_intersection),
-            -- invertiamo il valore di `inside` ( true / false ) per determinare se il punto è dentro il poligono
+            -- If the point is to the left of the intersection (x < x_intersection),
+            -- flip the `inside` flag to determine containment
             if x < x_intersection then
                 inside = not inside
             end
         end
     end
 
-    -- Restituisce true se il punto è dentro il poligono, false altrimenti
+    -- Returns true if the point is inside the polygon, false otherwise
     return inside
 end
 
--- Funzione che restituisce il nome del continente in cui si trova il punto
+-- Function that returns the name of the continent containing the point
 function get_continent(point, continents)
-    -- Itera su ogni continente e il relativo poligono
+    -- Iterate over each continent polygon
     for continent, polygon in pairs(continents) do
-        -- Se il punto è dentro il poligono del continente
         if is_point_in_polygon(point, polygon) then
-            -- print(continent)
-            -- print("\n\n")
-            return continent  -- Restituisce il nome del continente
+            return continent
         end
     end
 
-    return "Unknown"  -- Se nessun poligono contiene il punto, restituisce "Unknown"
+    return "Unknown"  -- If no polygon contains the point
 end
 
 --##################################################
 
--- Funzione per leggere un file txt e creare la struttura rtt_reference
+-- Function to read a txt file and create the rtt_reference structure
 function create_rtt_reference(file_path)
 
     local rtt_reference = {}
     local file = io.open(file_path, "r")
-    -- Errore in Wireshark
+    -- Error handling in Wireshark
     if not file then
-        error("File non trovato: " .. file_path)
+        error("File not found: " .. file_path)
     end
 
-    -- Leggi ogni riga del file
+    -- Read each line of the file
     for line in file:lines() do
-        -- Dividi la riga in campi separati dalla virgola
+        -- Split the line into comma-separated fields
         local country_code, mean, stddev = line:match("([^,]+),([^,]+),([^,]+)")
-        -- Per i dati validi
+        -- For valid data
         if country_code and mean and stddev then
 
             rtt_reference[country_code] = {
-                mean = tonumber(mean),     -- Converti il mean in numero
-                stddev = tonumber(stddev)  -- Converti lo stddev in numero
+                mean = tonumber(mean),     -- Convert mean to number
+                stddev = tonumber(stddev)  -- Convert stddev to number
             }
 
         end
@@ -125,16 +124,12 @@ function create_rtt_reference(file_path)
 
 end
 
--- Determina il separatore di directory in base al sistema operativo
-local separator = package.config:sub(1,1)  -- '/' su Unix-like, '\' su Windows
+-- Determine path separator based on the operating system
+local separator = package.config:sub(1,1)  -- '/' on Unix-like, '\\' on Windows
 local file_path = Dir.personal_plugins_path() .. separator .. "ntp_rtt_stats.txt"
 local rtt_reference = create_rtt_reference(file_path)
 
---for country_code, data in pairs(rtt_reference) do
---    print(country_code, data.mean, data.stddev)
---end
-
--- Funzione per determinare il paese con l'RTT medio più vicino
+-- Function to determine the country with the closest mean RTT
 local function estimate_response_country(rtt)
 
     local best_match = "Unknown"
@@ -159,30 +154,30 @@ end
 
 --##################################################
 
--- Creazione del protocollo Proto(short_name, long_name)
+-- Creation of the protocol Proto(short_name, long_name)
 local rtt_checker = Proto("RTTCheck", "RTT Anomaly Detector")
 
--- Campi Wireshark per le operazione del protocollo
-local o_rtt_tcp = Field.new("tcp.analysis.ack_rtt")         -- campo per l'rtt nei pacchetti TCP / TLS
-local o_icmp_resptime = Field.new("icmp.resptime")          -- campo per l'rtt nei pacchetti ICMP
+-- Wireshark fields for protocol operations
+local o_rtt_tcp = Field.new("tcp.analysis.ack_rtt")         -- field for RTT in TCP/TLS packets
+local o_icmp_resptime = Field.new("icmp.resptime")          -- field for RTT in ICMP packets
 
--- Prendiamo i campi source poiché quelli source or destination potrebbero contenere + valori e non servono
-local o_geoip_src = Field.new("ip.geoip.src_country_iso")   -- campo per codice ISO della nazione
-local o_geoip_lon = Field.new("ip.geoip.src_lon")           -- campo per longitugine della nazione
-local o_geoip_lat = Field.new("ip.geoip.src_lat")           -- campo per latitudine della nazione
+-- Use source fields because source/destination may contain multiple values
+local o_geoip_src = Field.new("ip.geoip.src_country_iso")   -- ISO country code field
+local o_geoip_lon = Field.new("ip.geoip.src_lon")           -- source country longitude
+local o_geoip_lat = Field.new("ip.geoip.src_lat")           -- source country latitude
 
 --##################################################
 
--- Post-Dissector che lavora per ICMP e TCP
+-- Post-Dissector that works for ICMP e TCP
 function rtt_checker.dissector(buffer, pinfo, tree)
 
     local icmp_resptime = o_icmp_resptime() and o_icmp_resptime().value
 
     if icmp_resptime then
-        -- Converti il valore NSTime in stringa e poi in numero
-        icmp_resptime = tostring(icmp_resptime)  -- Converti NSTime in stringa
-        icmp_resptime = tonumber(icmp_resptime)  -- Converti stringa in numero
-        icmp_resptime = icmp_resptime            -- In millisecondi
+        -- Convert NSTime value to string then to number
+        icmp_resptime = tostring(icmp_resptime)  -- Convert NSTime to string
+        icmp_resptime = tonumber(icmp_resptime)  -- Convert string to number
+        icmp_resptime = icmp_resptime            -- In milliseconds
     end
 
     local rtt_tcp = o_rtt_tcp() and o_rtt_tcp().value
@@ -213,7 +208,7 @@ function rtt_checker.dissector(buffer, pinfo, tree)
             local estimated_country = estimate_response_country(rtt_value) 
             local used_country
 
-            -- Se il paese non è presente, useremo il continente
+            -- If the country entry is not present, we'll use the continent
             if not rtt_reference[country] then
 
                 local point = {lat, lon}
@@ -228,13 +223,13 @@ function rtt_checker.dissector(buffer, pinfo, tree)
                 mean = rtt_reference[used_country].mean
                 stddev = rtt_reference[used_country].stddev
 
-                -- I valori soglia sono 2 volte la deviazione standard
-                threshold_upper = mean + (2 * stddev)  -- Soglia superiore
-                threshold_lower = mean - (2 * stddev)  -- Soglia inferiore
+                -- Threshold values are 2 times the standard deviation (k value)
+                threshold_upper = mean + (2 * stddev)  -- Upper threshold
+                threshold_lower = mean - (2 * stddev)  -- Lower threshold
 
             end
 
-            -- Se non ho nè country nè continente => visualizza Unknown
+            -- If RTT is outside thresholds and the estimated country differs from the used country, report anomaly
             if (rtt_value > threshold_upper or rtt_value < threshold_lower) and estimated_country ~= used_country then
  
                 local subtree = tree:add(rtt_checker, "RTT Anomaly"):set_generated()
@@ -254,32 +249,25 @@ end
 -- Registrazione del protocollo come post-dissector
 register_postdissector(rtt_checker)
 
--- Funzione che visualizza la tabella di riferimento RTT
+-- Function that displays the RTT reference table
 local function menu_view_reference_rtt()
-    -- Finestra di testo con titolo
+    -- Text window with title
     local win = TextWindow.new("RTT Reference Table")
-    -- Intestazione della finestra
+    -- Window header
     win:append("=== RTT Reference Values by Country & Continent ===\n\n")
-    -- Intestazione delle colonne
+    -- Column header
     win:append(string.format("  %-16s  %-15s  %-15s\n", "Country", "Mean RTT (ms)", "StdDev (ms)"))
     win:append(string.rep("-", 52) .. "\n")
     for country, stats in pairs(rtt_reference) do
-        -- Dati di ogni paese mostrando la media e la deviazione standard
+        -- Show each country's mean and standard deviation
         win:append(string.format("  %-16s  %-15.2f  %-15.2f\n", country, stats.mean, stats.stddev))
     end
 
 end
 
--- Registra l'elemento di menu sotto "RTT" con il nome "Visualizza Tabella di Riferimento"
--- Viene eseguita la funzione 'menu_view_reference_rtt'
--- register_menu(stringa, funzione, where)
+-- Register the menu item under "RTT" named "View RTT Reference Table"
+-- Invokes the function 'menu_view_reference_rtt'
+-- register_menu(string, function, where)
 register_menu("RTT/View RTT Reference Table", menu_view_reference_rtt, MENU_TOOLS_UNSORTED)
-
-set_plugin_info({
-    version = "4.4",
-    description = "RTT-Geo-Location-Anomaly-Detector",
-    author = "Nicofontanarosa",
-    repository = "https://github.com/Nicofontanarosa/RTT-Geo-Location-Anomaly-Detector/"
-})
 
 --##################################################
